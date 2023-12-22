@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	expose_register "github.com/shiyunjin/reverse-grpc"
+	"github.com/shiyunjin/expose_register"
 )
 
 func main() {

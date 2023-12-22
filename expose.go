@@ -12,7 +12,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	protoc "github.com/shiyunjin/reverse-grpc/proto"
+	protoc "github.com/shiyunjin/expose_register/proto"
 )
 
 var (

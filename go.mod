@@ -1,4 +1,4 @@
-module github.com/shiyunjin/reverse-grpc
+module github.com/shiyunjin/expose_register
 
 go 1.21
 
