@@ -64,7 +64,7 @@ func (s *gServer) Connect(stream protoc.TCP_ConnectServer) error {
 	return nil
 }
 
-func StartServer(secret, remotePort, localNetwork, localAddr string) error {
+func StartServer(ctx context.Context, secret, remotePort, localNetwork, localAddr string) error {
 	lis, err := net.Listen("tcp", ":"+remotePort)
 	if err != nil {
 		return err
@@ -87,6 +87,8 @@ func StartServer(secret, remotePort, localNetwork, localAddr string) error {
 	for {
 		select {
 		case <-exitChan:
+			return nil
+		case <-ctx.Done():
 			return nil
 		default:
 		}
@@ -139,11 +141,13 @@ func StartServer(secret, remotePort, localNetwork, localAddr string) error {
 
 		case <-exitChan:
 			return nil
+		case <-ctx.Done():
+			return nil
 		}
 	}
 }
 
-func StartClient(secret, remoteAddr string, remoteInSecret bool, localNetwork, localAddr string) error {
+func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecret bool, localNetwork, localAddr string) error {
 	dialOptions := []grpc.DialOption{}
 
 	if remoteInSecret {
@@ -157,9 +161,9 @@ func StartClient(secret, remoteAddr string, remoteInSecret bool, localNetwork, l
 
 	// Create metadata and context.
 	md := metadata.Pairs("token", secret)
-	ctx := metadata.NewOutgoingContext(context.Background(), md)
+	ctxMd := metadata.NewOutgoingContext(ctx, md)
 
-	remoteConnStreamClient, err = protoc.NewTCPClient(dial).Connect(ctx)
+	remoteConnStreamClient, err = protoc.NewTCPClient(dial).Connect(ctxMd)
 	if err != nil {
 		return err
 	}
@@ -197,6 +201,8 @@ func StartClient(secret, remoteAddr string, remoteInSecret bool, localNetwork, l
 			go pipeSocketClient(false, statusLocal, exitChan)
 
 		case <-exitChan:
+			return nil
+		case <-ctx.Done():
 			return nil
 		}
 	}

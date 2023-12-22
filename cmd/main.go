@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -14,7 +15,7 @@ func main() {
 	}
 
 	if os.Args[1] == "-s" {
-		err := expose_register.StartServer("123456", os.Args[2], "tcp", "0.0.0.0:"+os.Args[3])
+		err := expose_register.StartServer(context.Background(), "123456", os.Args[2], "tcp", "0.0.0.0:"+os.Args[3])
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -22,7 +23,7 @@ func main() {
 	}
 
 	if os.Args[1] == "-c" {
-		err := expose_register.StartClient("123456", os.Args[2]+":"+os.Args[3], true, "tcp", os.Args[4]+":"+os.Args[5])
+		err := expose_register.StartClient(context.Background(), "123456", os.Args[2]+":"+os.Args[3], true, "tcp", os.Args[4]+":"+os.Args[5])
 		if err != nil {
 			fmt.Println(err)
 			return
