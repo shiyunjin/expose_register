@@ -104,7 +104,11 @@ func StartServer(ctx context.Context, secret, remotePort, localNetwork, localAdd
 	if err != nil {
 		return err
 	}
-	defer localListen.Close()
+	defer func() {
+		if localListen != nil {
+			localListen.Close()
+		}
+	}()
 
 	localConn, err = localListen.Accept()
 	if err != nil {
@@ -129,15 +133,19 @@ func StartServer(ctx context.Context, secret, remotePort, localNetwork, localAdd
 				if localConn != nil {
 					localConn.Close()
 				}
+				if localListen != nil {
+					localListen.Close()
+				}
+				localListen, err := net.Listen(localNetwork, localAddr)
+				if err != nil {
+					return err
+				}
 				localConn, err = localListen.Accept()
 				if err != nil {
 					return err
 				}
 			}
 			go pipeSocketServer(false, statusLocal, exitChan)
-
-		case _ = <-statusRemote:
-			go pipeSocketServer(true, statusRemote, exitChan)
 
 		case <-exitChan:
 			return nil
@@ -254,8 +262,7 @@ func pipeSocketServer(remoteToLocal bool, status chan<- bool, exitChan chan stru
 		if remoteToLocal {
 			resp, err := remoteConnStreamServer.Recv()
 			if err != nil {
-				status <- false
-				SafeClose(remoteConnStreamExit)
+				SafeClose(exitChan)
 				return err
 			}
 			content = resp.Data
@@ -275,7 +282,6 @@ func pipeSocketServer(remoteToLocal bool, status chan<- bool, exitChan chan stru
 			})
 		}
 		if err != nil {
-			SafeClose(remoteConnStreamExit)
 			SafeClose(exitChan)
 			return err
 		}
