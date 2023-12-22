@@ -2,7 +2,7 @@ package expose_register
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"net"
 	"time"
 
@@ -67,7 +67,7 @@ func (s *gServer) Connect(stream protoc.TCP_ConnectServer) error {
 func StartServer(secret, remotePort, localNetwork, localAddr string) error {
 	lis, err := net.Listen("tcp", ":"+remotePort)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		return err
 	}
 	defer lis.Close()
 
@@ -75,12 +75,22 @@ func StartServer(secret, remotePort, localNetwork, localAddr string) error {
 	protoc.RegisterTCPServer(s, &gServer{
 		secret: secret,
 	})
+
+	exitChan := make(chan struct{})
+
 	go func() {
 		if err := s.Serve(lis); err != nil {
-			log.Fatalf("failed to serve: %v", err)
+			fmt.Printf("failed to serve: %v", err)
+			SafeClose(exitChan)
 		}
 	}()
 	for {
+		select {
+		case <-exitChan:
+			return nil
+		default:
+		}
+
 		if remoteConnStreamServer != nil {
 			break
 		}
@@ -101,7 +111,6 @@ func StartServer(secret, remotePort, localNetwork, localAddr string) error {
 
 	statusRemote := make(chan bool)
 	statusLocal := make(chan bool)
-	exitChan := make(chan struct{})
 
 	go pipeSocketServer(true, statusRemote, exitChan)
 	go pipeSocketServer(false, statusLocal, exitChan)
