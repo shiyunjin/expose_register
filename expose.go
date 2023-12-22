@@ -80,7 +80,7 @@ func StartServer(secret, remotePort, localNetwork, localAddr string) error {
 
 	go func() {
 		if err := s.Serve(lis); err != nil {
-			fmt.Printf("failed to serve: %v", err)
+			fmt.Printf("failed to serve: %v\n", err)
 			SafeClose(exitChan)
 		}
 	}()
@@ -108,6 +108,11 @@ func StartServer(secret, remotePort, localNetwork, localAddr string) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if localConn != nil {
+			localConn.Close()
+		}
+	}()
 
 	statusRemote := make(chan bool)
 	statusLocal := make(chan bool)
@@ -119,6 +124,9 @@ func StartServer(secret, remotePort, localNetwork, localAddr string) error {
 		select {
 		case s := <-statusLocal:
 			if !s {
+				if localConn != nil {
+					localConn.Close()
+				}
 				localConn, err = localListen.Accept()
 				if err != nil {
 					return err
@@ -160,6 +168,11 @@ func StartClient(secret, remoteAddr string, remoteInSecret bool, localNetwork, l
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if localConn != nil {
+			localConn.Close()
+		}
+	}()
 
 	statusRemote := make(chan bool)
 	statusLocal := make(chan bool)
@@ -172,6 +185,9 @@ func StartClient(secret, remoteAddr string, remoteInSecret bool, localNetwork, l
 		select {
 		case s := <-statusLocal:
 			if !s {
+				if localConn != nil {
+					localConn.Close()
+				}
 				localConn, err = net.Dial(localNetwork, localAddr)
 				if err != nil {
 					return err
