@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	protoc "github.com/shiyunjin/reverse-grpc/proto"
 )
@@ -23,6 +26,7 @@ var (
 )
 
 type gServer struct {
+	secret string
 	protoc.UnimplementedTCPServer
 }
 
@@ -38,6 +42,19 @@ func SafeClose[T any](c chan T) {
 }
 
 func (s *gServer) Connect(stream protoc.TCP_ConnectServer) error {
+	// Read metadata from client.
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		return status.Errorf(codes.DataLoss, "failed to get metadata")
+	}
+	if t, ok := md["token"]; ok {
+		if t[0] != s.secret {
+			return status.Errorf(codes.Unauthenticated, "invalid token")
+		}
+	} else {
+		return status.Errorf(codes.Unauthenticated, "empty token")
+	}
+
 	SafeClose(remoteConnStreamExit)
 	remoteConnStreamExit = make(chan struct{})
 
@@ -47,7 +64,7 @@ func (s *gServer) Connect(stream protoc.TCP_ConnectServer) error {
 	return nil
 }
 
-func StartServer(remotePort, localPort string) error {
+func StartServer(secret, remotePort, localNetwork, localAddr string) error {
 	lis, err := net.Listen("tcp", ":"+remotePort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -55,7 +72,9 @@ func StartServer(remotePort, localPort string) error {
 	defer lis.Close()
 
 	s := grpc.NewServer()
-	protoc.RegisterTCPServer(s, &gServer{})
+	protoc.RegisterTCPServer(s, &gServer{
+		secret: secret,
+	})
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
@@ -69,7 +88,7 @@ func StartServer(remotePort, localPort string) error {
 		time.Sleep(1 * time.Second)
 	}
 
-	localListen, err := net.Listen("tcp", "0.0.0.0:"+localPort)
+	localListen, err := net.Listen(localNetwork, localAddr)
 	if err != nil {
 		return err
 	}
@@ -89,8 +108,8 @@ func StartServer(remotePort, localPort string) error {
 
 	for {
 		select {
-		case status := <-statusLocal:
-			if !status {
+		case s := <-statusLocal:
+			if !s {
 				localConn, err = localListen.Accept()
 				if err != nil {
 					return err
@@ -107,20 +126,28 @@ func StartServer(remotePort, localPort string) error {
 	}
 }
 
-func StartClient(remoteAddr, remotePort, localAddr, localPort string) error {
-	var err error
+func StartClient(secret, remoteAddr string, remoteInSecret bool, localNetwork, localAddr string) error {
+	dialOptions := []grpc.DialOption{}
 
-	dial, err := grpc.Dial(remoteAddr+":"+remotePort, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if remoteInSecret {
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	dial, err := grpc.Dial(remoteAddr, dialOptions...)
 	if err != nil {
 		return err
 	}
 
-	remoteConnStreamClient, err = protoc.NewTCPClient(dial).Connect(context.Background())
+	// Create metadata and context.
+	md := metadata.Pairs("token", secret)
+	ctx := metadata.NewOutgoingContext(context.Background(), md)
+
+	remoteConnStreamClient, err = protoc.NewTCPClient(dial).Connect(ctx)
 	if err != nil {
 		return err
 	}
 
-	localConn, err = net.Dial("tcp", localAddr+":"+localPort)
+	localConn, err = net.Dial(localNetwork, localAddr)
 	if err != nil {
 		return err
 	}
@@ -134,9 +161,9 @@ func StartClient(remoteAddr, remotePort, localAddr, localPort string) error {
 
 	for {
 		select {
-		case status := <-statusLocal:
-			if !status {
-				localConn, err = net.Dial("tcp", localAddr+":"+localPort)
+		case s := <-statusLocal:
+			if !s {
+				localConn, err = net.Dial(localNetwork, localAddr)
 				if err != nil {
 					return err
 				}
@@ -175,7 +202,7 @@ func pipeSocketClient(remoteToLocal bool, status chan<- bool, exitChan chan stru
 		if remoteToLocal {
 			_, err = localConn.Write(content)
 		} else {
-			err = remoteConnStreamClient.Send(&protoc.Resp{
+			err = remoteConnStreamClient.Send(&protoc.Data{
 				Data: buf[:read],
 			})
 		}
@@ -212,9 +239,8 @@ func pipeSocketServer(remoteToLocal bool, status chan<- bool, exitChan chan stru
 		if remoteToLocal {
 			_, err = localConn.Write(content)
 		} else {
-			err = remoteConnStreamServer.Send(&protoc.Req{
-				Status: 200,
-				Data:   buf[:read],
+			err = remoteConnStreamServer.Send(&protoc.Data{
+				Data: buf[:read],
 			})
 		}
 		if err != nil {

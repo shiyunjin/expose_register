@@ -4,16 +4,10 @@ package Tcp;
 
 option go_package = "internal/proto/tcp;protoc";
 
-message Req {
-  int64 status = 1;
-  bytes data = 2;
-}
-
-message Resp {
-  string token = 1;
-  bytes data = 2;
+message Data {
+  bytes data = 1;
 }
 
 service TCP {
-  rpc Connect (stream Resp) returns (stream Req) {}
+  rpc Connect (stream Data) returns (stream Data) {}
 }

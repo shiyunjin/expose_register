@@ -47,8 +47,8 @@ func (c *tCPClient) Connect(ctx context.Context, opts ...grpc.CallOption) (TCP_C
 }
 
 type TCP_ConnectClient interface {
-	Send(*Resp) error
-	Recv() (*Req, error)
+	Send(*Data) error
+	Recv() (*Data, error)
 	grpc.ClientStream
 }
 
@@ -56,12 +56,12 @@ type tCPConnectClient struct {
 	grpc.ClientStream
 }
 
-func (x *tCPConnectClient) Send(m *Resp) error {
+func (x *tCPConnectClient) Send(m *Data) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *tCPConnectClient) Recv() (*Req, error) {
-	m := new(Req)
+func (x *tCPConnectClient) Recv() (*Data, error) {
+	m := new(Data)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -101,8 +101,8 @@ func _TCP_Connect_Handler(srv interface{}, stream grpc.ServerStream) error {
 }
 
 type TCP_ConnectServer interface {
-	Send(*Req) error
-	Recv() (*Resp, error)
+	Send(*Data) error
+	Recv() (*Data, error)
 	grpc.ServerStream
 }
 
@@ -110,12 +110,12 @@ type tCPConnectServer struct {
 	grpc.ServerStream
 }
 
-func (x *tCPConnectServer) Send(m *Req) error {
+func (x *tCPConnectServer) Send(m *Data) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *tCPConnectServer) Recv() (*Resp, error) {
-	m := new(Resp)
+func (x *tCPConnectServer) Recv() (*Data, error) {
+	m := new(Data)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
