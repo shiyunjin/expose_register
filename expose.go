@@ -2,12 +2,14 @@ package expose_register
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -155,11 +157,15 @@ func StartServer(ctx context.Context, secret, remotePort, localNetwork, localAdd
 	}
 }
 
-func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecret bool, localNetwork, localAddr string) error {
+func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecure bool, localNetwork, localAddr string) error {
 	dialOptions := []grpc.DialOption{}
 
-	if remoteInSecret {
+	if remoteInSecure {
 		dialOptions = append(dialOptions, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	} else {
+		dialOptions = append(dialOptions, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+		})))
 	}
 
 	dial, err := grpc.Dial(remoteAddr, dialOptions...)
