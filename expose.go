@@ -94,6 +94,11 @@ func StartServer(ctx context.Context, secret string, remoteListener net.Listener
 		}
 	}()
 
+	defer func() {
+		SafeClose(remoteConnStreamExit)
+		remoteConnStreamServer = nil
+	}()
+
 	for {
 		select {
 		case <-exitChan:
@@ -205,6 +210,10 @@ func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecure 
 	if err != nil {
 		return err
 	}
+
+	defer func() {
+		remoteConnStreamClient = nil
+	}()
 
 	exitChan := make(chan struct{})
 
