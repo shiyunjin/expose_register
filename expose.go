@@ -77,13 +77,7 @@ func muxConfig() *yamux.Config {
 	return muxConfig
 }
 
-func StartServer(ctx context.Context, secret, remotePort string, localListener net.Listener) error {
-	lis, err := net.Listen("tcp", ":"+remotePort)
-	if err != nil {
-		return err
-	}
-	defer lis.Close()
-
+func StartServer(ctx context.Context, secret string, remoteListener net.Listener, localListener net.Listener) error {
 	s := grpc.NewServer()
 	protoc.RegisterTCPServer(s, &gServer{
 		secret: secret,
@@ -92,7 +86,7 @@ func StartServer(ctx context.Context, secret, remotePort string, localListener n
 	exitChan := make(chan struct{})
 
 	go func() {
-		if err := s.Serve(lis); err != nil {
+		if err := s.Serve(remoteListener); err != nil {
 			fmt.Printf("failed to serve: %v\n", err)
 			SafeClose(exitChan)
 		}
@@ -155,7 +149,7 @@ func StartServer(ctx context.Context, secret, remotePort string, localListener n
 		}
 	}()
 
-	localConn, err = localListen.Accept()
+	localConn, err := localListen.Accept()
 	if err != nil {
 		return err
 	}

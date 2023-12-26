@@ -16,12 +16,17 @@ func main() {
 	}
 
 	if os.Args[1] == "-s" {
+		remoteListen, err := net.Listen("tcp", "0.0.0.0:"+os.Args[2])
+		if err != nil {
+			return
+		}
+
 		listen, err := net.Listen("tcp", "0.0.0.0:"+os.Args[3])
 		if err != nil {
 			return
 		}
 
-		if err := expose_register.StartServer(context.Background(), "123456", os.Args[2], listen); err != nil {
+		if err := expose_register.StartServer(context.Background(), "123456", remoteListen, listen); err != nil {
 			fmt.Println(err)
 			return
 		}
