@@ -152,7 +152,8 @@ func StartServer(ctx context.Context, secret string, remoteListener net.Listener
 		}
 	}()
 
-	localConn, err := localListen.Accept()
+	var err error
+	localConn, err = localListen.Accept()
 	if err != nil {
 		return err
 	}
