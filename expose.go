@@ -79,6 +79,8 @@ func muxConfig() *yamux.Config {
 
 func StartServer(ctx context.Context, secret string, remoteListener net.Listener, localListener net.Listener) error {
 	s := grpc.NewServer()
+	defer s.Stop()
+
 	protoc.RegisterTCPServer(s, &gServer{
 		secret: secret,
 	})
@@ -91,6 +93,7 @@ func StartServer(ctx context.Context, secret string, remoteListener net.Listener
 			SafeClose(exitChan)
 		}
 	}()
+
 	for {
 		select {
 		case <-exitChan:
