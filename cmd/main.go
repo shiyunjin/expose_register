@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 
 	"github.com/shiyunjin/expose_register"
@@ -15,15 +16,21 @@ func main() {
 	}
 
 	if os.Args[1] == "-s" {
-		err := expose_register.StartServer(context.Background(), "123456", os.Args[2], "tcp", "0.0.0.0:"+os.Args[3])
+		listen, err := net.Listen("tcp", "0.0.0.0:"+os.Args[3])
 		if err != nil {
+			return
+		}
+
+		if err := expose_register.StartServer(context.Background(), "123456", os.Args[2], listen); err != nil {
 			fmt.Println(err)
 			return
 		}
 	}
 
 	if os.Args[1] == "-c" {
-		err := expose_register.StartClient(context.Background(), "123456", os.Args[2]+":"+os.Args[3], true, "tcp", os.Args[4]+":"+os.Args[5])
+		err := expose_register.StartClient(context.Background(), "123456", os.Args[2]+":"+os.Args[3], true, func() (net.Conn, error) {
+			return net.Dial("tcp", os.Args[4]+":"+os.Args[5])
+		})
 		if err != nil {
 			fmt.Println(err)
 			return

@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/hashicorp/yamux"
+
 	protoc "github.com/shiyunjin/expose_register/proto"
 )
 
@@ -66,7 +68,16 @@ func (s *gServer) Connect(stream protoc.TCP_ConnectServer) error {
 	return nil
 }
 
-func StartServer(ctx context.Context, secret, remotePort, localNetwork, localAddr string) error {
+func muxConfig() *yamux.Config {
+	muxConfig := yamux.DefaultConfig()
+	muxConfig.EnableKeepAlive = true
+	muxConfig.KeepAliveInterval = 10 * time.Second
+	muxConfig.MaxStreamWindowSize = 6 * 1024 * 1024
+
+	return muxConfig
+}
+
+func StartServer(ctx context.Context, secret, remotePort string, localListener net.Listener) error {
 	lis, err := net.Listen("tcp", ":"+remotePort)
 	if err != nil {
 		return err
@@ -102,13 +113,45 @@ func StartServer(ctx context.Context, secret, remotePort, localNetwork, localAdd
 		time.Sleep(1 * time.Second)
 	}
 
-	localListen, err := net.Listen(localNetwork, localAddr)
-	if err != nil {
-		return err
-	}
+	localListen := ListenPipe()
 	defer func() {
 		if localListen != nil {
 			localListen.Close()
+		}
+	}()
+
+	go func() {
+		conn, err := localListen.Dial(`pipe`, `pipe`)
+		if err != nil {
+			SafeClose(exitChan)
+			fmt.Printf("failed to dial: %v\n", err)
+			return
+		}
+
+		session, err := yamux.Client(conn, muxConfig())
+		if err != nil {
+			SafeClose(exitChan)
+			fmt.Printf("failed to create yamux session: %v\n", err)
+			return
+		}
+
+		for {
+			conn, err := localListener.Accept()
+			if err != nil {
+				SafeClose(exitChan)
+				fmt.Printf("failed to accept: %v\n", err)
+				return
+			}
+
+			go func() {
+				stream, err := session.Open()
+				if err != nil {
+					fmt.Printf("failed to open stream: %v\n", err)
+					return
+				}
+
+				Join(stream, conn)
+			}()
 		}
 	}()
 
@@ -130,25 +173,8 @@ func StartServer(ctx context.Context, secret, remotePort, localNetwork, localAdd
 
 	for {
 		select {
-		case s := <-statusLocal:
-			if !s {
-				if localConn != nil {
-					localConn.Close()
-				}
-				if localListen != nil {
-					localListen.Close()
-				}
-				localListen, err := net.Listen(localNetwork, localAddr)
-				if err != nil {
-					return err
-				}
-				localConn, err = localListen.Accept()
-				if err != nil {
-					return err
-				}
-			}
-			go pipeSocketServer(false, statusLocal, exitChan)
-
+		case <-statusLocal:
+			return nil
 		case <-exitChan:
 			return nil
 		case <-ctx.Done():
@@ -157,7 +183,7 @@ func StartServer(ctx context.Context, secret, remotePort, localNetwork, localAdd
 	}
 }
 
-func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecure bool, localNetwork, localAddr string) error {
+func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecure bool, localDialer func() (net.Conn, error)) error {
 	dialOptions := []grpc.DialOption{}
 
 	if remoteInSecure {
@@ -182,7 +208,44 @@ func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecure 
 		return err
 	}
 
-	localConn, err = net.Dial(localNetwork, localAddr)
+	exitChan := make(chan struct{})
+
+	pipe := ListenPipe()
+
+	go func() {
+		conn, err := pipe.Accept()
+		if err != nil {
+			fmt.Printf("failed to accept: %v\n", err)
+			return
+		}
+
+		session, err := yamux.Server(conn, muxConfig())
+		if err != nil {
+			fmt.Printf("failed to create yamux session: %v\n", err)
+			return
+		}
+
+		for {
+			stream, err := session.Accept()
+			if err != nil {
+				SafeClose(exitChan)
+				fmt.Printf("failed to accept stream: %v\n", err)
+				return
+			}
+
+			go func() {
+				conn, err := localDialer()
+				if err != nil {
+					fmt.Printf("failed to dial: %v\n", err)
+					return
+				}
+
+				Join(stream, conn)
+			}()
+		}
+	}()
+
+	localConn, err = pipe.Dial(`pipe`, `pipe`)
 	if err != nil {
 		return err
 	}
@@ -194,26 +257,14 @@ func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecure 
 
 	statusRemote := make(chan bool)
 	statusLocal := make(chan bool)
-	exitChan := make(chan struct{})
 
 	go pipeSocketClient(true, statusRemote, exitChan)
 	go pipeSocketClient(false, statusLocal, exitChan)
 
 	for {
 		select {
-		case s := <-statusLocal:
-			if !s {
-				if localConn != nil {
-					localConn.Close()
-				}
-				localConn, err = net.Dial(localNetwork, localAddr)
-				if err != nil {
-					return err
-				}
-			}
-
-			go pipeSocketClient(false, statusLocal, exitChan)
-
+		case <-statusLocal:
+			return nil
 		case <-exitChan:
 			return nil
 		case <-ctx.Done():
