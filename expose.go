@@ -169,7 +169,9 @@ func StartServer(ctx context.Context, secret string, remoteListener net.Listener
 	}()
 
 	statusRemote := make(chan bool)
+	defer SafeClose(statusRemote)
 	statusLocal := make(chan bool)
+	defer SafeClose(statusLocal)
 
 	go pipeSocketServer(true, statusRemote, exitChan)
 	go pipeSocketServer(false, statusLocal, exitChan)
@@ -263,7 +265,9 @@ func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecure 
 	}()
 
 	statusRemote := make(chan bool)
+	defer SafeClose(statusRemote)
 	statusLocal := make(chan bool)
+	defer SafeClose(statusLocal)
 
 	go pipeSocketClient(true, statusRemote, exitChan)
 	go pipeSocketClient(false, statusLocal, exitChan)
