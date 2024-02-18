@@ -214,6 +214,7 @@ func StartClient(ctx context.Context, secret, remoteAddr string, remoteInSecure 
 	if err != nil {
 		return err
 	}
+	defer dial.Close()
 
 	// Create metadata and context.
 	md := metadata.Pairs("token", secret)
