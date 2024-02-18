@@ -45,6 +45,17 @@ func SafeClose[T any](c chan T) {
 	}
 }
 
+func SafeSend[T any](c chan<- T, content T) {
+	defer func() {
+		if err := recover(); err != nil {
+		}
+	}()
+
+	if c != nil {
+		c <- content
+	}
+}
+
 func (s *gServer) Connect(stream protoc.TCP_ConnectServer) error {
 	// Read metadata from client.
 	md, ok := metadata.FromIncomingContext(stream.Context())
@@ -302,7 +313,7 @@ func pipeSocketClient(remoteToLocal bool, status chan<- bool, exitChan chan stru
 			read, err = localConn.Read(buf)
 		}
 		if err != nil {
-			status <- false
+			SafeSend(status, false)
 			return err
 		}
 
@@ -338,7 +349,7 @@ func pipeSocketServer(remoteToLocal bool, status chan<- bool, exitChan chan stru
 			read, err = localConn.Read(buf)
 		}
 		if err != nil {
-			status <- false
+			SafeSend(status, false)
 			return err
 		}
 
