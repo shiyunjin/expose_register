@@ -156,6 +156,16 @@ func StartServer(ctx context.Context, secret string, remoteListener net.Listener
 				return
 			}
 
+			select {
+			case <-exitChan:
+				conn.Close()
+				return
+			case <-ctx.Done():
+				conn.Close()
+				return
+			default:
+			}
+
 			go func() {
 				stream, err := session.Open()
 				if err != nil {
